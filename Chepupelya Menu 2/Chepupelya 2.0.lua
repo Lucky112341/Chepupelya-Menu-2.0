@@ -1,5 +1,5 @@
 -- ==========================================================
--- CHEPUPELYA MENU (KINETIC CHARGE EDITION)
+-- CHEPUPELYA MENU (KINETIC CHARGE EDITION + GLOBAL BRING FIX)
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -307,24 +307,20 @@ RunService.Heartbeat:Connect(function(dt)
 	end
 
 	if targetPlayer then
-		-- ГОЛОВНИЙ ФІКС АНТИ-КОСМОСУ:
-		-- Жорстко обнуляємо лінійну швидкість себе на кожному кадрі. 
-		-- Фізична віддача зіткнення НЕ ЗДАТНА запустити тебе вверх!
 		root.AssemblyLinearVelocity = Vector3.zero
 		hum.AutoRotate = false
 
-		-- Накопичення енергії (від 0 до 100% за ~0.25 сек)
+		-- Накопичення енергії
 		energyCharge = math.min(energyCharge + dt * 4, 1)
 
-		-- Збільшуємо щільність для передачі максимальної кінетики
+		-- Збільшуємо щільність
 		root.CustomPhysicalProperties = PhysicalProperties.new(100, 0.3, 0.5, 1, 1)
 
-		-- Бешене обертання, яке зростає разом із зарядом
+		-- Бешене обертання
 		local maxSpin = 90000
 		local currentSpin = maxSpin * energyCharge
 		root.AssemblyAngularVelocity = Vector3.new(0, currentSpin, 0)
 
-		-- Коли енергія пікова — робимо мікро-доторк для передачі удару
 		if energyCharge >= 0.8 then
 			local tRoot = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
 			if tRoot then
@@ -332,7 +328,6 @@ RunService.Heartbeat:Connect(function(dt)
 			end
 		end
 	else
-		-- Якщо поруч нікого немає — відразу скидаємо заряд і не крутимось
 		if energyCharge > 0 then
 			cleanPushPhysics()
 		end
@@ -453,22 +448,53 @@ superRingButton.MouseButton1Click:Connect(function()
 	end)
 end)
 
--- ===== BRING & SHOOT =====
+-- ===== BRING & SHOOT (ПОКРАЩЕНА ВЕРСІЯ) =====
 local heldItems, autoBringOn = {}, false
 
-RunService.Heartbeat:Connect(function()
-	if #heldItems == 0 then return end
-	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-	if not root then return end
+-- Допоміжна функція для отримання прав на фізику (Network Ownership)
+local function claimOwnership()
+	pcall(function()
+		if sethiddenproperty then
+			sethiddenproperty(player, "MaximumSimulationRadius", 9e9)
+			sethiddenproperty(player, "SimulationRadius", 9e9)
+		end
+		if setsimulationradius then
+			setsimulationradius(9e9, 9e9)
+		end
+	end)
+end
 
-	local targetCenter = root.CFrame * CFrame.new(0, 1, -8)
+RunService.Heartbeat:Connect(function(dt)
+	if #heldItems == 0 then return end
+	claimOwnership() 
+
+	local cam = workspace.CurrentCamera
+	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if not root or not cam then return end
+
+	-- Тримаємо деталі прямо перед камерою (зручно для пострілу)
+	local targetCenter = cam.CFrame * CFrame.new(0, 0, -10)
 
 	for _, item in ipairs(heldItems) do
 		pcall(function()
-			if item.part.Parent then
-				local targetPos = targetCenter.Position
-				item.part.AssemblyLinearVelocity = (targetPos - item.part.Position) * 8
-				item.part.AssemblyAngularVelocity = Vector3.new(item.spin.X, item.spin.Y, item.spin.Z)
+			local part = item.part
+			if part and part.Parent then
+				-- Будимо фізику деталі
+				part.AssemblyLinearVelocity = part.AssemblyLinearVelocity + Vector3.new(0.001, 0, 0)
+				
+				local dist = (targetCenter.Position - part.Position).Magnitude
+				
+				-- Якщо деталь надто далеко, миттєво телепортуємо (CFrame) ближче,
+				-- отримуємо права (Network Ownership), а вже потім плавно тримаємо.
+				if dist > 150 then
+					part.CFrame = targetCenter
+					part.AssemblyLinearVelocity = Vector3.zero
+				else
+					-- Агресивне утримання (множник 40)
+					part.AssemblyLinearVelocity = (targetCenter.Position - part.Position) * 40
+				end
+				
+				part.AssemblyAngularVelocity = item.spin
 			end
 		end)
 	end
@@ -476,23 +502,31 @@ end)
 
 local function grabPart(part)
 	pcall(function()
+		local origMassless = part.Massless
+		part.Massless = true 
+		part.CanCollide = false
+		
 		table.insert(heldItems, {
 			part = part,
-			origCollide = part.CanCollide,
-			spin = Vector3.new(math.random(5,15), math.random(5,15), math.random(5,15))
+			origCollide = true,
+			origMassless = origMassless,
+			spin = Vector3.new(math.random(-25, 25), math.random(-25, 25), math.random(-25, 25))
 		})
-		part.CanCollide = false
 	end)
 end
 
 bringButton.MouseButton1Click:Connect(function()
+	claimOwnership()
 	for _, obj in ipairs(workspace:GetDescendants()) do
 		if obj:IsA("BasePart") and not obj.Anchored and not obj:IsDescendantOf(player.Character or {}) then
 			local pModel = obj:FindFirstAncestorOfClass("Model")
 			if not (pModel and pModel:FindFirstChild("Humanoid")) and obj.Name ~= "Baseplate" and obj.Name ~= "Terrain" then
 				local held = false
 				for _, h in ipairs(heldItems) do if h.part == obj then held = true break end end
-				if not held then grabPart(obj) return end
+				if not held then 
+					grabPart(obj) 
+					return
+				end
 			end
 		end
 	end
@@ -505,8 +539,9 @@ end)
 
 task.spawn(function()
 	while true do
-		task.wait(0.25)
+		task.wait(0.1) 
 		if autoBringOn then
+			claimOwnership()
 			local added = 0
 			for _, obj in ipairs(workspace:GetDescendants()) do
 				if obj:IsA("BasePart") and not obj.Anchored and not obj:IsDescendantOf(player.Character or {}) then
@@ -514,10 +549,11 @@ task.spawn(function()
 					if not (pModel and pModel:FindFirstChild("Humanoid")) and obj.Name ~= "Baseplate" and obj.Name ~= "Terrain" then
 						local held = false
 						for _, h in ipairs(heldItems) do if h.part == obj then held = true break end end
+						
 						if not held then
 							grabPart(obj)
 							added += 1
-							if added >= 10 then break end
+							if added >= 15 then break end 
 						end
 					end
 				end
@@ -534,10 +570,16 @@ shootButton.MouseButton1Click:Connect(function()
 	local dir = cam.CFrame.LookVector
 	for _, item in ipairs(heldItems) do
 		pcall(function()
-			if item.part.Parent then
+			if item.part and item.part.Parent then
 				item.part.CanCollide = item.origCollide
-				item.part.AssemblyLinearVelocity = dir * 8500
-				item.part.AssemblyAngularVelocity = Vector3.new(math.random(-50,50), math.random(-50,50), math.random(-50,50))
+				item.part.Massless = item.origMassless or false
+				
+				-- Зміщуємо трохи вперед перед пострілом
+				item.part.CFrame = item.part.CFrame + (dir * 3)
+				
+				-- Супер-удар
+				item.part.AssemblyLinearVelocity = dir * 12000
+				item.part.AssemblyAngularVelocity = Vector3.new(math.random(-100,100), math.random(-100,100), math.random(-100,100))
 			end
 		end)
 	end
