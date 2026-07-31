@@ -1,5 +1,5 @@
 -- ==========================================================
--- CHEPUPELYA MENU (FLING FIX - STRATOSPHERE EDITION)
+-- CHEPUPELYA MENU (KINETIC CHARGE EDITION)
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -248,157 +248,100 @@ flyButton.MouseButton1Click:Connect(function()
 	if flying then startFly() else stopFly() end
 end)
 
--- ===== PUSH MODE (МАГНІТ-МІКСЕР) =====
+-- ===== PUSH MODE (НАКОПИЧЕННЯ ЕНЕРГІЇ ТА АНТИ-КОСМОС) =====
 local pushModeOn = false
-local auraPart = nil
-local mixerTarget = nil
-local savedPosition = nil
-local originalProperties = {}
-local mixerSpin = nil
-local mixerHold = nil
+local energyCharge = 0
 
-local function cleanFling()
-	if mixerSpin then mixerSpin:Destroy() mixerSpin = nil end
-	if mixerHold then mixerHold:Destroy() mixerHold = nil end
-	
+local function cleanPushPhysics()
+	energyCharge = 0
 	local char = player.Character
 	if char then
 		local hum = char:FindFirstChild("Humanoid")
+		local root = char:FindFirstChild("HumanoidRootPart")
 		if hum then hum.AutoRotate = true end
-		
-		-- Повертаємо колізії та фізику у норму
+		if root then
+			root.AssemblyAngularVelocity = Vector3.zero
+			root.AssemblyLinearVelocity = Vector3.zero
+		end
 		for _, p in ipairs(char:GetDescendants()) do
-			if p:IsA("BasePart") and originalProperties[p] then
-				p.CanCollide = originalProperties[p].CanCollide
-				p.CustomPhysicalProperties = originalProperties[p].Physical
+			if p:IsA("BasePart") then
+				p.CustomPhysicalProperties = nil
 			end
 		end
 	end
-	originalProperties = {}
 end
 
 pushButton.MouseButton1Click:Connect(function()
 	pushModeOn = not pushModeOn
 	updateButtonVisual(pushButton, pushModeOn, "Push Mode")
 
-	if pushModeOn then
-		if not auraPart then
-			auraPart = Instance.new("Part")
-			auraPart.Size = Vector3.new(15, 15, 15) -- Зона спрацьовування магніту
-			auraPart.Transparency = 1
-			auraPart.CanCollide = false
-			auraPart.Anchored = true
-			auraPart.Parent = workspace
-		end
-	else
-		if auraPart then auraPart:Destroy() auraPart = nil end
-		mixerTarget = nil
-		-- Якщо ми вимикаємо режим під час міксу, повертаємось на землю
-		if player.Character and savedPosition then
-			local root = player.Character:FindFirstChild("HumanoidRootPart")
-			if root then 
-				root.Velocity = Vector3.zero
-				root.CFrame = CFrame.new(savedPosition) 
-			end
-		end
-		cleanFling()
+	if not pushModeOn then
+		cleanPushPhysics()
 	end
 end)
 
-RunService.Heartbeat:Connect(function()
+RunService.Heartbeat:Connect(function(dt)
 	if not pushModeOn then return end
-	
+
 	local char = player.Character
 	local root = char and char:FindFirstChild("HumanoidRootPart")
 	local hum = char and char:FindFirstChild("Humanoid")
 	if not root or not hum then return end
-	
-	if auraPart then auraPart.CFrame = root.CFrame end
 
-	if not mixerTarget then
-		-- 1. СКАНИРУЄМО: шукаємо жертву поруч
-		for _, part in ipairs(workspace:GetPartsInPart(auraPart)) do
-			local model = part:FindFirstAncestorOfClass("Model")
-			if model and model ~= char then
-				local targetHum = model:FindFirstChild("Humanoid")
-				local targetRoot = model:FindFirstChild("HumanoidRootPart")
-				
-				if targetHum and targetHum.Health > 0 and targetRoot then
-					mixerTarget = model
-					savedPosition = root.Position -- Запам'ятовуємо, де ми стояли
-					
-					-- Зберігаємо нормальну фізику і робимо себе привидом, щоб не чіплятися за текстури
-					for _, p in ipairs(char:GetDescendants()) do
-						if p:IsA("BasePart") then
-							originalProperties[p] = {
-								CanCollide = p.CanCollide,
-								Physical = p.CustomPhysicalProperties
-							}
-							p.CanCollide = false
-							p.CustomPhysicalProperties = PhysicalProperties.new(100, 0.3, 0.5, 1, 1)
-						end
-					end
+	-- Шукаємо гравця у контактній зоні (7 студів)
+	local targetPlayer = nil
+	local minDistance = 7
+
+	for _, otherPlayer in ipairs(Players:GetPlayers()) do
+		if otherPlayer ~= player and otherPlayer.Character then
+			local oRoot = otherPlayer.Character:FindFirstChild("HumanoidRootPart")
+			local oHum = otherPlayer.Character:FindFirstChild("Humanoid")
+			if oRoot and oHum and oHum.Health > 0 then
+				local dist = (oRoot.Position - root.Position).Magnitude
+				if dist < minDistance then
+					targetPlayer = otherPlayer
 					break
 				end
 			end
 		end
+	end
+
+	if targetPlayer then
+		-- ГОЛОВНИЙ ФІКС АНТИ-КОСМОСУ:
+		-- Жорстко обнуляємо лінійну швидкість себе на кожному кадрі. 
+		-- Фізична віддача зіткнення НЕ ЗДАТНА запустити тебе вверх!
+		root.AssemblyLinearVelocity = Vector3.zero
+		hum.AutoRotate = false
+
+		-- Накопичення енергії (від 0 до 100% за ~0.25 сек)
+		energyCharge = math.min(energyCharge + dt * 4, 1)
+
+		-- Збільшуємо щільність для передачі максимальної кінетики
+		root.CustomPhysicalProperties = PhysicalProperties.new(100, 0.3, 0.5, 1, 1)
+
+		-- Бешене обертання, яке зростає разом із зарядом
+		local maxSpin = 90000
+		local currentSpin = maxSpin * energyCharge
+		root.AssemblyAngularVelocity = Vector3.new(0, currentSpin, 0)
+
+		-- Коли енергія пікова — робимо мікро-доторк для передачі удару
+		if energyCharge >= 0.8 then
+			local tRoot = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+			if tRoot then
+				root.CFrame = root.CFrame:Lerp(tRoot.CFrame, 0.2)
+			end
+		end
 	else
-		-- 2. ЗАСМОКТУЄМО ТА МІКСУЄМО
-		local targetRoot = mixerTarget:FindFirstChild("HumanoidRootPart")
-		local targetHum = mixerTarget:FindFirstChild("Humanoid")
-
-		if targetRoot and targetHum and targetHum.Health > 0 then
-			local targetSpeed = targetRoot.Velocity.Magnitude
-			local heightDiff = math.abs(targetRoot.Position.Y - savedPosition.Y)
-			
-			-- Якщо жертва отримала від нас кінетичний удар і полетіла (швидкість > 100)
-			-- Або підлетіла занадто високо
-			if targetSpeed > 100 or heightDiff > 25 then
-				mixerTarget = nil
-				root.Velocity = Vector3.zero
-				root.CFrame = CFrame.new(savedPosition) -- Миттєво телепортуємось назад на землю
-				cleanFling()
-				return
-			end
-
-			-- Створюємо сили міксера (якщо їх ще немає)
-			if not mixerSpin then
-				hum.AutoRotate = false
-				
-				-- Міксер: крутимось в усі боки для максимального хаосу
-				mixerSpin = Instance.new("BodyAngularVelocity")
-				mixerSpin.Name = "ChepupelyaFling"
-				mixerSpin.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-				mixerSpin.AngularVelocity = Vector3.new(math.random(-50000, 50000), 50000, math.random(-50000, 50000))
-				mixerSpin.Parent = root
-				
-				-- Якір: ця штука тримає нашу лінійну швидкість на 0.
-				-- Це означає, що від зіткнення полетить ТІЛЬКИ жертва, а ми лишимось на місці.
-				mixerHold = Instance.new("BodyVelocity")
-				mixerHold.Name = "ChepupelyaAnchor"
-				mixerHold.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-				mixerHold.Velocity = Vector3.zero 
-				mixerHold.Parent = root
-			end
-
-			-- Ефект Магніту: замість того, щоб тягнути жертву (що неможливо локально), 
-			-- ми телепортуємо себе прямо в неї. Із включеним міксером це гарантований відліт.
-			local randomOffset = Vector3.new(math.random(-10,10)/100, math.random(-10,10)/100, math.random(-10,10)/100)
-			root.CFrame = targetRoot.CFrame * CFrame.new(randomOffset)
-		else
-			-- Жертва вийшла або вмерла
-			mixerTarget = nil
-			root.Velocity = Vector3.zero
-			root.CFrame = CFrame.new(savedPosition)
-			cleanFling()
+		-- Якщо поруч нікого немає — відразу скидаємо заряд і не крутимось
+		if energyCharge > 0 then
+			cleanPushPhysics()
 		end
 	end
 end)
 
 player.CharacterAdded:Connect(function()
-	if pushModeOn then cleanFling() mixerTarget = nil end
+	if pushModeOn then cleanPushPhysics() end
 end)
-
 
 -- ===== SUPER RING (FIXED & OPTIMIZED) =====
 local superRingOn, ringConnection = false, nil
