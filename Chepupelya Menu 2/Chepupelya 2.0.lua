@@ -1,5 +1,5 @@
 -- ==========================================================
--- CHEPUPELYA MENU (FULL FINAL OPTIMIZED VERSION - PUSH STRATOSPHERE FIX)
+-- CHEPUPELYA MENU (FLING FIX - STRATOSPHERE EDITION)
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -248,17 +248,25 @@ flyButton.MouseButton1Click:Connect(function()
 	if flying then startFly() else stopFly() end
 end)
 
--- ===== PUSH MODE (ОНОВЛЕНИЙ З ВЕЛИЧЕЗНОЮ МАСОЮ ТА КРУТІННЯМ) =====
-local pushModeOn, auraPart = false, nil
-local pushedCooldowns = {}
+-- ===== PUSH MODE (СПРАВЖНІЙ FLING) =====
+local pushModeOn = false
+local auraPart = nil
+local flingMover = nil
 
-local function setCharacterHeavy(char, isHeavy)
-	for _, part in ipairs(char:GetDescendants()) do
-		if part:IsA("BasePart") then
-			if isHeavy then
-				part.CustomPhysicalProperties = PhysicalProperties.new(100, 0.3, 0.5, 1, 1)
-			else
-				part.CustomPhysicalProperties = nil
+local function cleanFling()
+	if flingMover then 
+		flingMover:Destroy() 
+		flingMover = nil 
+	end
+	
+	local char = player.Character
+	if char then
+		local hum = char:FindFirstChild("Humanoid")
+		if hum then hum.AutoRotate = true end
+		
+		for _, p in ipairs(char:GetDescendants()) do
+			if p:IsA("BasePart") then
+				p.CustomPhysicalProperties = nil
 			end
 		end
 	end
@@ -271,7 +279,7 @@ pushButton.MouseButton1Click:Connect(function()
 	if pushModeOn then
 		if not auraPart then
 			auraPart = Instance.new("Part")
-			auraPart.Size = Vector3.new(25, 25, 25)
+			auraPart.Size = Vector3.new(20, 20, 20)
 			auraPart.Transparency = 1
 			auraPart.CanCollide = false
 			auraPart.Anchored = true
@@ -279,10 +287,7 @@ pushButton.MouseButton1Click:Connect(function()
 		end
 	else
 		if auraPart then auraPart:Destroy() auraPart = nil end
-		pushedCooldowns = {}
-		if player.Character then
-			setCharacterHeavy(player.Character, false)
-		end
+		cleanFling()
 	end
 end)
 
@@ -291,48 +296,51 @@ RunService.Heartbeat:Connect(function()
 	pcall(function()
 		local char = player.Character
 		local root = char and char:FindFirstChild("HumanoidRootPart")
-		if not root then return end
+		local hum = char and char:FindFirstChild("Humanoid")
+		if not root or not hum then return end
 		
 		auraPart.CFrame = root.CFrame
-		local now = os.clock()
 		local hasTargetNearby = false
 
 		for _, part in ipairs(workspace:GetPartsInPart(auraPart)) do
 			local model = part:FindFirstAncestorOfClass("Model")
 			if model and model ~= char then
 				local targetHum = model:FindFirstChild("Humanoid")
-				local targetRoot = model:FindFirstChild("HumanoidRootPart")
-				if targetHum and targetRoot and targetHum.Health > 0 then
+				if targetHum and targetHum.Health > 0 then
 					hasTargetNearby = true
-					
-					-- Збільшуємо масу і крутимо свій RootPart
-					setCharacterHeavy(char, true)
-					root.AssemblyAngularVelocity = Vector3.new(0, 3500, 0)
-
-					if pushedCooldowns[model] and (now - pushedCooldowns[model]) < 1.5 then continue end
-					pushedCooldowns[model] = now
-					
-					targetHum.PlatformStand = true
-					local direction = (targetRoot.Position - root.Position)
-					if direction.Magnitude < 0.001 then direction = Vector3.new(math.random(), 0, math.random()) end
-					
-					-- Запуск суперника у стратосферу
-					targetRoot.AssemblyLinearVelocity = direction.Unit * 4000 + Vector3.new(0, 30000, 0)
-					targetRoot.AssemblyAngularVelocity = Vector3.new(math.random(-1000, 1000), math.random(-1000, 1000), math.random(-1000, 1000))
-					
-					task.delay(5, function() 
-						if targetHum and targetHum.Parent then 
-							targetHum.PlatformStand = false 
-						end 
-					end)
+					break
 				end
 			end
 		end
 
-		if not hasTargetNearby then
-			setCharacterHeavy(char, false)
+		if hasTargetNearby then
+			if not flingMover then
+				hum.AutoRotate = false -- Забороняємо Roblox вирівнювати персонажа проти обертання
+				
+				flingMover = Instance.new("BodyAngularVelocity")
+				flingMover.Name = "ChepupelyaFling"
+				-- Блокуємо крутіння по X та Z, щоб гравець стояв РІВНО і не падав, крутимо лише по осі Y
+				flingMover.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+				flingMover.AngularVelocity = Vector3.new(0, 45000, 0)
+				flingMover.Parent = root
+				
+				root.CustomPhysicalProperties = PhysicalProperties.new(100, 0.3, 0.5, 1, 1)
+				
+				-- Зменшуємо тертя на руках і ногах, щоб вони не чіплялися за землю і не запускали тебе
+				for _, p in ipairs(char:GetDescendants()) do
+					if p:IsA("BasePart") and p ~= root then
+						p.CustomPhysicalProperties = PhysicalProperties.new(0.01, 0, 0, 0, 0)
+					end
+				end
+			end
+		else
+			cleanFling()
 		end
 	end)
+end)
+
+player.CharacterAdded:Connect(function()
+	if pushModeOn then cleanFling() end
 end)
 
 -- ===== SUPER RING (FIXED & OPTIMIZED) =====
