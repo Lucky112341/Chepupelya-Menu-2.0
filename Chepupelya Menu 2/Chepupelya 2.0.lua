@@ -1,5 +1,5 @@
 -- ==========================================================
--- CHEPUPELYA MENU (FLING FIX - STRATOSPHERE EDITION)
+-- CHEPUPELYA MENU (FLING FIX - MAGNET MIXER EDITION)
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -248,15 +248,20 @@ flyButton.MouseButton1Click:Connect(function()
 	if flying then startFly() else stopFly() end
 end)
 
--- ===== PUSH MODE (СПРАВЖНІЙ FLING) =====
+-- ===== PUSH MODE (МІКСЕР + МАГНІТ FLING) =====
 local pushModeOn = false
 local auraPart = nil
 local flingMover = nil
+local positionLocker = nil
 
 local function cleanFling()
 	if flingMover then 
 		flingMover:Destroy() 
 		flingMover = nil 
+	end
+	if positionLocker then 
+		positionLocker:Destroy() 
+		positionLocker = nil 
 	end
 	
 	local char = player.Character
@@ -279,7 +284,7 @@ pushButton.MouseButton1Click:Connect(function()
 	if pushModeOn then
 		if not auraPart then
 			auraPart = Instance.new("Part")
-			auraPart.Size = Vector3.new(20, 20, 20)
+			auraPart.Size = Vector3.new(25, 25, 25)
 			auraPart.Transparency = 1
 			auraPart.CanCollide = false
 			auraPart.Anchored = true
@@ -300,37 +305,47 @@ RunService.Heartbeat:Connect(function()
 		if not root or not hum then return end
 		
 		auraPart.CFrame = root.CFrame
-		local hasTargetNearby = false
+		local targetRoot = nil
 
 		for _, part in ipairs(workspace:GetPartsInPart(auraPart)) do
 			local model = part:FindFirstAncestorOfClass("Model")
 			if model and model ~= char then
 				local targetHum = model:FindFirstChild("Humanoid")
-				if targetHum and targetHum.Health > 0 then
-					hasTargetNearby = true
+				local tRoot = model:FindFirstChild("HumanoidRootPart")
+				if targetHum and targetHum.Health > 0 and tRoot then
+					targetRoot = tRoot
 					break
 				end
 			end
 		end
 
-		if hasTargetNearby then
+		if targetRoot then
 			if not flingMover then
-				hum.AutoRotate = false -- Забороняємо Roblox вирівнювати персонажа проти обертання
+				hum.AutoRotate = false 
 				
 				flingMover = Instance.new("BodyAngularVelocity")
 				flingMover.Name = "ChepupelyaFling"
-				-- Блокуємо крутіння по X та Z, щоб гравець стояв РІВНО і не падав, крутимо лише по осі Y
 				flingMover.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-				flingMover.AngularVelocity = Vector3.new(0, 45000, 0)
+				flingMover.AngularVelocity = Vector3.new(0, 50000, 0)
 				flingMover.Parent = root
 				
-				root.CustomPhysicalProperties = PhysicalProperties.new(100, 0.3, 0.5, 1, 1)
+				positionLocker = Instance.new("BodyPosition")
+				positionLocker.Name = "ChepupelyaLocker"
+				positionLocker.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+				positionLocker.Position = root.Position
+				positionLocker.P = 50000
+				positionLocker.Parent = root
 				
-				-- Зменшуємо тертя на руках і ногах, щоб вони не чіплялися за землю і не запускали тебе
+				root.CustomPhysicalProperties = PhysicalProperties.new(100, 0, 0, 100, 100)
+				
 				for _, p in ipairs(char:GetDescendants()) do
 					if p:IsA("BasePart") and p ~= root then
 						p.CustomPhysicalProperties = PhysicalProperties.new(0.01, 0, 0, 0, 0)
 					end
+				end
+			else
+				if positionLocker then
+					positionLocker.Position = targetRoot.Position
 				end
 			end
 		else
@@ -343,7 +358,7 @@ player.CharacterAdded:Connect(function()
 	if pushModeOn then cleanFling() end
 end)
 
--- ===== SUPER RING (FIXED & OPTIMIZED) =====
+-- ===== SUPER RING =====
 local superRingOn, ringConnection = false, nil
 local ringItems = {}
 local ringScanTask = nil
