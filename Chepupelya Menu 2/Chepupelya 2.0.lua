@@ -248,9 +248,11 @@ flyButton.MouseButton1Click:Connect(function()
 	if flying then startFly() else stopFly() end
 end)
 
--- ===== PUSH MODE (НАКОПИЧЕННЯ ЕНЕРГІЇ ТА АНТИ-КОСМОС) =====
+-- ===== PUSH MODE (ОНОВЛЕНО З ПОВЕРНЕННЯМ НА МІСЦЕ) =====
 local pushModeOn = false
 local energyCharge = 0
+local pushAnchorPart = nil
+local currentPushTarget = nil
 
 local function cleanPushPhysics()
 	energyCharge = 0
@@ -269,6 +271,13 @@ local function cleanPushPhysics()
 			end
 		end
 	end
+	
+	-- Видаляємо якір, якщо він є
+	if pushAnchorPart then
+		pushAnchorPart:Destroy()
+		pushAnchorPart = nil
+	end
+	currentPushTarget = nil
 end
 
 pushButton.MouseButton1Click:Connect(function()
@@ -288,7 +297,56 @@ RunService.Heartbeat:Connect(function(dt)
 	local hum = char and char:FindFirstChild("Humanoid")
 	if not root or not hum then return end
 
-	-- Шукаємо гравця у контактній зоні (7 студів)
+	-- 1. Якщо у нас вже є ціль, перевіряємо її стан
+	if currentPushTarget then
+		local isValid = false
+		local tRoot = nil
+		
+		if currentPushTarget.Parent and currentPushTarget.Character then
+			tRoot = currentPushTarget.Character:FindFirstChild("HumanoidRootPart")
+			local tHum = currentPushTarget.Character:FindFirstChild("Humanoid")
+			if tRoot and tHum and tHum.Health > 0 then
+				isValid = true
+			end
+		end
+
+		if isValid then
+			local dist = (tRoot.Position - root.Position).Magnitude
+			-- Якщо гравця далеко відкинуто або він телепортувався
+			if dist > 25 then
+				isValid = false
+			end
+		end
+
+		-- Якщо ціль зникла, померла або відлетіла
+		if not isValid then
+			-- Телепортуємося назад на наш невидимий парт
+			if pushAnchorPart then
+				root.CFrame = pushAnchorPart.CFrame
+			end
+			-- Скидаємо фізику та відв'язуємось
+			cleanPushPhysics()
+			return
+		else
+			-- Продовжуємо накопичення енергії та обертання
+			root.AssemblyLinearVelocity = Vector3.zero
+			hum.AutoRotate = false
+			energyCharge = math.min(energyCharge + dt * 4, 1)
+			root.CustomPhysicalProperties = PhysicalProperties.new(100, 0.3, 0.5, 1, 1)
+
+			local maxSpin = 90000
+			local currentSpin = maxSpin * energyCharge
+			root.AssemblyAngularVelocity = Vector3.new(0, currentSpin, 0)
+
+			if energyCharge >= 0.8 and tRoot then
+				root.CFrame = root.CFrame:Lerp(tRoot.CFrame, 0.2)
+			end
+			
+			return -- Виходимо з функції, щоб не шукати нову ціль
+		end
+	end
+
+	-- 2. Якщо немає цілі, шукаємо гравця у контактній зоні (7 студів)
 	local targetPlayer = nil
 	local minDistance = 7
 
@@ -307,28 +365,21 @@ RunService.Heartbeat:Connect(function(dt)
 	end
 
 	if targetPlayer then
-		root.AssemblyLinearVelocity = Vector3.zero
-		hum.AutoRotate = false
-
-		-- Накопичення енергії
-		energyCharge = math.min(energyCharge + dt * 4, 1)
-
-		-- Збільшуємо щільність
-		root.CustomPhysicalProperties = PhysicalProperties.new(100, 0.3, 0.5, 1, 1)
-
-		-- Бешене обертання
-		local maxSpin = 90000
-		local currentSpin = maxSpin * energyCharge
-		root.AssemblyAngularVelocity = Vector3.new(0, currentSpin, 0)
-
-		if energyCharge >= 0.8 then
-			local tRoot = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
-			if tRoot then
-				root.CFrame = root.CFrame:Lerp(tRoot.CFrame, 0.2)
-			end
-		end
+		-- Створюємо якір на нашій позиції перед притягуванням
+		pushAnchorPart = Instance.new("Part")
+		pushAnchorPart.Name = "PushReturnAnchor"
+		pushAnchorPart.Anchored = true
+		pushAnchorPart.CanCollide = false
+		pushAnchorPart.Transparency = 1
+		pushAnchorPart.Size = Vector3.new(1, 1, 1)
+		pushAnchorPart.CFrame = root.CFrame
+		pushAnchorPart.Parent = workspace
+		
+		-- Запам'ятовуємо ціль
+		currentPushTarget = targetPlayer
 	else
-		if energyCharge > 0 then
+		-- Якщо нікого немає, а енергія лишилася чи парт існує – очищуємо
+		if energyCharge > 0 or pushAnchorPart then
 			cleanPushPhysics()
 		end
 	end
