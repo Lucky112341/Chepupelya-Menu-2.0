@@ -1,5 +1,5 @@
 -- ==========================================================
--- CHEPUPELYA MENU (KINETIC CHARGE EDITION + 100% GLOBAL BRING)
+-- CHEPUPELYA MENU (100% GLOBAL BRING - ANTI-COLLISION GRID)
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -57,27 +57,15 @@ mainFrame.Parent = screenGui
 
 -- ===== DRAGGING =====
 local dragging, dragInput, dragStart, startPos
-
 mainFrame.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		dragging = true
-		dragStart = input.Position
-		startPos = mainFrame.Position
-
-		input.Changed:Connect(function()
-			if input.UserInputState == Enum.UserInputState.End then
-				dragging = false
-			end
-		end)
+		dragging = true; dragStart = input.Position; startPos = mainFrame.Position
+		input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
 	end
 end)
-
 mainFrame.InputChanged:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-		dragInput = input
-	end
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
 end)
-
 UserInputService.InputChanged:Connect(function(input)
 	if input == dragInput and dragging then
 		local delta = input.Position - dragStart
@@ -88,31 +76,17 @@ end)
 -- ===== КНОПКИ =====
 local function createMenuButton(name, text, position, size, textScaled, textSize)
 	local btn = Instance.new("TextButton")
-	btn.Name = name
-	btn.AnchorPoint = Vector2.new(0.5, 0.5)
-	btn.Size = size
-	btn.Position = position
-	btn.BackgroundColor3 = black
-	btn.BorderColor3 = purple
-	btn.BorderSizePixel = 2
-	btn.Text = text
-	btn.TextColor3 = purple
-	btn.TextScaled = textScaled
-	btn.TextSize = textSize
-	btn.FontFace = font
-	btn.Parent = mainFrame
+	btn.Name = name; btn.AnchorPoint = Vector2.new(0.5, 0.5); btn.Size = size; btn.Position = position
+	btn.BackgroundColor3 = black; btn.BorderColor3 = purple; btn.BorderSizePixel = 2
+	btn.Text = text; btn.TextColor3 = purple; btn.TextScaled = textScaled; btn.TextSize = textSize; btn.FontFace = font; btn.Parent = mainFrame
 	return btn
 end
 
 local function updateButtonVisual(btn, isOn, baseText)
 	if isOn then
-		btn.Text = baseText .. " [ON]"
-		btn.TextColor3 = green
-		btn.BorderColor3 = green
+		btn.Text = baseText .. " [ON]"; btn.TextColor3 = green; btn.BorderColor3 = green
 	else
-		btn.Text = baseText
-		btn.TextColor3 = purple
-		btn.BorderColor3 = purple
+		btn.Text = baseText; btn.TextColor3 = purple; btn.BorderColor3 = purple
 	end
 end
 
@@ -123,17 +97,9 @@ local pushButton = createMenuButton("PushButton", "Push Mode", UDim2.new(0.5, 0,
 local superRingButton = createMenuButton("SuperRingButton", "Super Ring", UDim2.new(0.5, 0, 0.375, 0), UDim2.new(0.74, 0, 0.05, 0), true, 14)
 
 local partText = Instance.new("TextLabel")
-partText.AnchorPoint = Vector2.new(0.5, 0.5)
-partText.Size = UDim2.new(0.728, 0, 0.084, 0)
-partText.Position = UDim2.new(0.5, 0, 0.517, 0)
-partText.BackgroundColor3 = black
-partText.BorderColor3 = purple
-partText.BorderSizePixel = 2
-partText.Text = "Shoot Part Menu"
-partText.TextColor3 = purple
-partText.TextScaled = true
-partText.FontFace = font
-partText.Parent = mainFrame
+partText.AnchorPoint = Vector2.new(0.5, 0.5); partText.Size = UDim2.new(0.728, 0, 0.084, 0); partText.Position = UDim2.new(0.5, 0, 0.517, 0)
+partText.BackgroundColor3 = black; partText.BorderColor3 = purple; partText.BorderSizePixel = 2
+partText.Text = "Shoot Part Menu"; partText.TextColor3 = purple; partText.TextScaled = true; partText.FontFace = font; partText.Parent = mainFrame
 
 local bringButton = createMenuButton("BringButton", "Bring Part", UDim2.new(0.255, 0, 0.695, 0), UDim2.new(0.246, 0, 0.169, 0), false, 24)
 local shootButton = createMenuButton("ShootButton", "Push", UDim2.new(0.739, 0, 0.693, 0), UDim2.new(0.246, 0, 0.169, 0), false, 24)
@@ -178,266 +144,144 @@ local function updateCharacterSettings(character)
 end
 
 speedButton.MouseButton1Click:Connect(function()
-	speedOn = not speedOn
-	updateButtonVisual(speedButton, speedOn, "UltraSpeed")
+	speedOn = not speedOn; updateButtonVisual(speedButton, speedOn, "UltraSpeed")
 	if player.Character then updateCharacterSettings(player.Character) end
 end)
-
 jumpButton.MouseButton1Click:Connect(function()
-	jumpOn = not jumpOn
-	updateButtonVisual(jumpButton, jumpOn, "Ultra Jump")
+	jumpOn = not jumpOn; updateButtonVisual(jumpButton, jumpOn, "Ultra Jump")
 	if player.Character then updateCharacterSettings(player.Character) end
 end)
-
 player.CharacterAdded:Connect(updateCharacterSettings)
 
--- ===== FLY =====
+-- ===== FLY (Скорочено) =====
 local flying, flyConnection, bodyVelocity, bodyGyro = false, nil, nil, nil
-local flySpeed = 50
 local keysPressed = {}
-
 UserInputService.InputBegan:Connect(function(input, gp) if not gp then keysPressed[input.KeyCode] = true end end)
 UserInputService.InputEnded:Connect(function(input) keysPressed[input.KeyCode] = nil end)
 
 local function startFly()
 	local char = player.Character
-	if not char then return end
-	local rootPart = char:FindFirstChild("HumanoidRootPart")
-	local humanoid = char:FindFirstChild("Humanoid")
-	if not rootPart or not humanoid then return end
-
-	humanoid.PlatformStand = true
-	bodyVelocity = Instance.new("BodyVelocity")
+	if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+	char.Humanoid.PlatformStand = true
+	bodyVelocity = Instance.new("BodyVelocity", char.HumanoidRootPart)
 	bodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-	bodyVelocity.Parent = rootPart
-
-	bodyGyro = Instance.new("BodyGyro")
-	bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-	bodyGyro.P = 3000
-	bodyGyro.Parent = rootPart
+	bodyGyro = Instance.new("BodyGyro", char.HumanoidRootPart)
+	bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge); bodyGyro.P = 3000
 
 	flyConnection = RunService.RenderStepped:Connect(function()
-		pcall(function()
-			local camera = workspace.CurrentCamera
-			local moveVector = Vector3.new(0, 0, 0)
-			if keysPressed[Enum.KeyCode.W] then moveVector += camera.CFrame.LookVector end
-			if keysPressed[Enum.KeyCode.S] then moveVector -= camera.CFrame.LookVector end
-			if keysPressed[Enum.KeyCode.A] then moveVector -= camera.CFrame.RightVector end
-			if keysPressed[Enum.KeyCode.D] then moveVector += camera.CFrame.RightVector end
-			if keysPressed[Enum.KeyCode.Space] then moveVector += Vector3.new(0, 1, 0) end
-			if keysPressed[Enum.KeyCode.LeftShift] then moveVector -= Vector3.new(0, 1, 0) end
-			
-			if moveVector.Magnitude > 0 then moveVector = moveVector.Unit * flySpeed end
-			bodyVelocity.Velocity = moveVector
-			bodyGyro.CFrame = CFrame.new(rootPart.Position, rootPart.Position + camera.CFrame.LookVector)
-		end)
+		local cam = workspace.CurrentCamera
+		local move = Vector3.zero
+		if keysPressed[Enum.KeyCode.W] then move += cam.CFrame.LookVector end
+		if keysPressed[Enum.KeyCode.S] then move -= cam.CFrame.LookVector end
+		if keysPressed[Enum.KeyCode.A] then move -= cam.CFrame.RightVector end
+		if keysPressed[Enum.KeyCode.D] then move += cam.CFrame.RightVector end
+		if keysPressed[Enum.KeyCode.Space] then move += Vector3.new(0, 1, 0) end
+		if keysPressed[Enum.KeyCode.LeftShift] then move -= Vector3.new(0, 1, 0) end
+		if move.Magnitude > 0 then move = move.Unit * 50 end
+		bodyVelocity.Velocity = move
+		bodyGyro.CFrame = CFrame.new(char.HumanoidRootPart.Position, char.HumanoidRootPart.Position + cam.CFrame.LookVector)
 	end)
 end
 
-local function stopFly()
-	if flyConnection then flyConnection:Disconnect() flyConnection = nil end
-	if bodyVelocity then bodyVelocity:Destroy() end
-	if bodyGyro then bodyGyro:Destroy() end
-	local char = player.Character
-	if char and char:FindFirstChild("Humanoid") then char.Humanoid.PlatformStand = false end
-end
-
 flyButton.MouseButton1Click:Connect(function()
-	flying = not flying
-	updateButtonVisual(flyButton, flying, "FLY")
-	if flying then startFly() else stopFly() end
-end)
-
--- ===== PUSH MODE =====
-local pushModeOn = false
-local energyCharge = 0
-local pushAnchorPart = nil
-local currentPushTarget = nil
-
-local function cleanPushPhysics()
-	energyCharge = 0
-	local char = player.Character
-	if char then
-		local hum = char:FindFirstChild("Humanoid")
-		local root = char:FindFirstChild("HumanoidRootPart")
-		if hum then hum.AutoRotate = true end
-		if root then
-			root.AssemblyAngularVelocity = Vector3.zero
-			root.AssemblyLinearVelocity = Vector3.zero
-		end
-		for _, p in ipairs(char:GetDescendants()) do
-			if p:IsA("BasePart") then
-				p.CustomPhysicalProperties = nil
-			end
-		end
-	end
-	
-	if pushAnchorPart then
-		pushAnchorPart:Destroy()
-		pushAnchorPart = nil
-	end
-	currentPushTarget = nil
-end
-
-pushButton.MouseButton1Click:Connect(function()
-	pushModeOn = not pushModeOn
-	updateButtonVisual(pushButton, pushModeOn, "Push Mode")
-
-	if not pushModeOn then
-		cleanPushPhysics()
+	flying = not flying; updateButtonVisual(flyButton, flying, "FLY")
+	if flying then startFly() else
+		if flyConnection then flyConnection:Disconnect() end
+		if bodyVelocity then bodyVelocity:Destroy() end
+		if bodyGyro then bodyGyro:Destroy() end
+		if player.Character and player.Character:FindFirstChild("Humanoid") then player.Character.Humanoid.PlatformStand = false end
 	end
 end)
 
-RunService.Heartbeat:Connect(function(dt)
-	if not pushModeOn then return end
-
-	local char = player.Character
-	local root = char and char:FindFirstChild("HumanoidRootPart")
-	local hum = char and char:FindFirstChild("Humanoid")
-	if not root or not hum then return end
-
-	if currentPushTarget then
-		local isValid = false
-		local tRoot = nil
-		
-		if currentPushTarget.Parent and currentPushTarget.Character then
-			tRoot = currentPushTarget.Character:FindFirstChild("HumanoidRootPart")
-			local tHum = currentPushTarget.Character:FindFirstChild("Humanoid")
-			if tRoot and tHum and tHum.Health > 0 then
-				isValid = true
-			end
-		end
-
-		if isValid then
-			local dist = (tRoot.Position - root.Position).Magnitude
-			if dist > 25 then
-				isValid = false
-			end
-		end
-
-		if not isValid then
-			if pushAnchorPart then
-				root.CFrame = pushAnchorPart.CFrame
-			end
-			cleanPushPhysics()
-			return
-		else
-			root.AssemblyLinearVelocity = Vector3.zero
-			hum.AutoRotate = false
-			energyCharge = math.min(energyCharge + dt * 4, 1)
-			root.CustomPhysicalProperties = PhysicalProperties.new(100, 0.3, 0.5, 1, 1)
-
-			local maxSpin = 90000
-			local currentSpin = maxSpin * energyCharge
-			root.AssemblyAngularVelocity = Vector3.new(0, currentSpin, 0)
-
-			if energyCharge >= 0.8 and tRoot then
-				root.CFrame = root.CFrame:Lerp(tRoot.CFrame, 0.2)
-			end
-			
-			return 
-		end
-	end
-
-	local targetPlayer = nil
-	local minDistance = 7
-
-	for _, otherPlayer in ipairs(Players:GetPlayers()) do
-		if otherPlayer ~= player and otherPlayer.Character then
-			local oRoot = otherPlayer.Character:FindFirstChild("HumanoidRootPart")
-			local oHum = otherPlayer.Character:FindFirstChild("Humanoid")
-			if oRoot and oHum and oHum.Health > 0 then
-				local dist = (oRoot.Position - root.Position).Magnitude
-				if dist < minDistance then
-					targetPlayer = otherPlayer
-					break
-				end
-			end
-		end
-	end
-
-	if targetPlayer then
-		pushAnchorPart = Instance.new("Part")
-		pushAnchorPart.Name = "PushReturnAnchor"
-		pushAnchorPart.Anchored = true
-		pushAnchorPart.CanCollide = false
-		pushAnchorPart.Transparency = 1
-		pushAnchorPart.Size = Vector3.new(1, 1, 1)
-		pushAnchorPart.CFrame = root.CFrame
-		pushAnchorPart.Parent = workspace
-		
-		currentPushTarget = targetPlayer
-	else
-		if energyCharge > 0 or pushAnchorPart then
-			cleanPushPhysics()
-		end
-	end
-end)
-
-
--- =========================================================================
--- ГЛОБАЛЬНИЙ ВПЛИВ НА ФІЗИКУ ТА ПРАВА (Network Ownership)
--- =========================================================================
+-- ===== GLOBAL NETWORK OWNERSHIP LOOP =====
 local heldItems = {}
 local autoBringOn = false
 local superRingOn = false
 local ringItems = {}
+local pushModeOn = false
 
--- Виконуємо взлом Network Ownership постійно в фоні, якщо активована хоч одна функція
 RunService.Heartbeat:Connect(function()
 	if superRingOn or autoBringOn or #heldItems > 0 or pushModeOn then
 		pcall(function()
-			if sethiddenproperty then
-				sethiddenproperty(player, "SimulationRadius", 100000)
-				sethiddenproperty(player, "MaxSimulationRadius", 100000)
-				sethiddenproperty(player, "MaximumSimulationRadius", 100000)
+			settings().Physics.AllowSleep = false
+			local set_sim = sethiddenproperty or set_hidden_property or set_hidden_prop
+			if set_sim then
+				set_sim(player, "SimulationRadius", math.huge)
+				set_sim(player, "MaxSimulationRadius", math.huge)
 			end
 			if setsimulationradius then
-				setsimulationradius(100000, 100000)
-			end
-			if settings().Physics then
-				settings().Physics.AllowSleep = false
+				setsimulationradius(math.huge, math.huge)
 			end
 		end)
+	end
+end)
+
+-- ===== PUSH MODE =====
+local energyCharge, pushAnchorPart, currentPushTarget = 0, nil, nil
+local function cleanPushPhysics()
+	energyCharge = 0
+	local char = player.Character
+	if char and char:FindFirstChild("HumanoidRootPart") then
+		char.Humanoid.AutoRotate = true
+		char.HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
+		char.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
+		char.HumanoidRootPart.CustomPhysicalProperties = nil
+	end
+	if pushAnchorPart then pushAnchorPart:Destroy(); pushAnchorPart = nil end
+	currentPushTarget = nil
+end
+
+pushButton.MouseButton1Click:Connect(function()
+	pushModeOn = not pushModeOn; updateButtonVisual(pushButton, pushModeOn, "Push Mode")
+	if not pushModeOn then cleanPushPhysics() end
+end)
+
+RunService.Heartbeat:Connect(function(dt)
+	if not pushModeOn then return end
+	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+
+	if currentPushTarget then
+		local tRoot = currentPushTarget.Character and currentPushTarget.Character:FindFirstChild("HumanoidRootPart")
+		if tRoot and (tRoot.Position - root.Position).Magnitude <= 25 then
+			player.Character.Humanoid.AutoRotate = false
+			energyCharge = math.min(energyCharge + dt * 4, 1)
+			root.CustomPhysicalProperties = PhysicalProperties.new(100, 0.3, 0.5, 1, 1)
+			root.AssemblyAngularVelocity = Vector3.new(0, 90000 * energyCharge, 0)
+			if energyCharge >= 0.8 then root.CFrame = root.CFrame:Lerp(tRoot.CFrame, 0.2) end
+		else
+			if pushAnchorPart then root.CFrame = pushAnchorPart.CFrame end
+			cleanPushPhysics()
+		end
+		return
+	end
+
+	for _, other in ipairs(Players:GetPlayers()) do
+		if other ~= player and other.Character and other.Character:FindFirstChild("HumanoidRootPart") then
+			if (other.Character.HumanoidRootPart.Position - root.Position).Magnitude < 7 then
+				pushAnchorPart = Instance.new("Part")
+				pushAnchorPart.Anchored = true; pushAnchorPart.CanCollide = false; pushAnchorPart.Transparency = 1
+				pushAnchorPart.CFrame = root.CFrame; pushAnchorPart.Parent = workspace
+				currentPushTarget = other; break
+			end
+		end
 	end
 end)
 
 
 -- ===== SUPER RING =====
-local ringConnection = nil
-local ringScanTask = nil
-
-local function stopSuperRing()
-	superRingOn = false
-	updateButtonVisual(superRingButton, false, "Super Ring")
-	
-	if ringConnection then ringConnection:Disconnect() ringConnection = nil end
-	if ringScanTask then task.cancel(ringScanTask) ringScanTask = nil end
-
-	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-	for _, item in ipairs(ringItems) do
-		pcall(function()
-			if item.part and item.part.Parent then
-				item.part.CanCollide = item.origCollide
-				if root then
-					local launchDir = (item.part.Position - root.Position).Unit
-					if launchDir.Magnitude == 0 or launchDir ~= launchDir then launchDir = Vector3.new(0, 1, 0) end
-					item.part.AssemblyLinearVelocity = launchDir * 250
-				end
-			end
-		end)
-	end
-	ringItems = {}
-end
-
+local ringConnection, ringScanTask
 superRingButton.MouseButton1Click:Connect(function()
-	if superRingOn then
-		stopSuperRing()
+	superRingOn = not superRingOn; updateButtonVisual(superRingButton, superRingOn, "Super Ring")
+	if not superRingOn then
+		if ringConnection then ringConnection:Disconnect() end
+		if ringScanTask then task.cancel(ringScanTask) end
+		for _, item in ipairs(ringItems) do
+			if item.part and item.part.Parent then item.part.CanCollide = item.origCollide end
+		end
+		ringItems = {}
 		return
 	end
-	
-	superRingOn = true
-	updateButtonVisual(superRingButton, true, "Super Ring")
 
 	ringScanTask = task.spawn(function()
 		while superRingOn do
@@ -449,19 +293,8 @@ superRingButton.MouseButton1Click:Connect(function()
 						local pModel = obj:FindFirstAncestorOfClass("Model")
 						if not (pModel and pModel:FindFirstChild("Humanoid")) and obj.Name ~= "Baseplate" and obj.Name ~= "Terrain" then
 							local found = false
-							for _, existing in ipairs(ringItems) do
-								if existing.part == obj then
-									found = true
-									table.insert(newItems, existing)
-									break
-								end
-							end
-							
-							if not found then
-								-- Змінюємо CanCollide лише ОДИН РАЗ (як і треба)
-								table.insert(newItems, {part = obj, origCollide = obj.CanCollide})
-								obj.CanCollide = false
-							end
+							for _, existing in ipairs(ringItems) do if existing.part == obj then found = true; table.insert(newItems, existing); break end end
+							if not found then table.insert(newItems, {part = obj, origCollide = obj.CanCollide}); obj.CanCollide = false end
 						end
 					end
 				end
@@ -471,67 +304,58 @@ superRingButton.MouseButton1Click:Connect(function()
 		end
 	end)
 
-	local currentAngle = 0
+	local angle = 0
 	ringConnection = RunService.Heartbeat:Connect(function(dt)
-		local char = player.Character
-		local root = char and char:FindFirstChild("HumanoidRootPart")
-		if not root then return end
-
-		currentAngle += (dt * 4)
-
-		local total = #ringItems
-		if total == 0 then return end
-
-		local radius = math.clamp(total * 0.5 + 10, 12, 80)
-		local now = os.clock()
-
+		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		if not root or #ringItems == 0 then return end
+		angle += dt * 4
+		local radius = math.clamp(#ringItems * 0.5 + 10, 12, 80)
 		for i, item in ipairs(ringItems) do
-			pcall(function()
-				if item.part and item.part.Parent then
-					local angle = currentAngle + ((i / total) * math.pi * 2)
-					local height = math.sin(now * 4 + i) * 3
-					local target = root.Position + Vector3.new(
-						math.cos(angle) * radius,
-						height,
-						math.sin(angle) * radius
-					)
-					item.part.AssemblyLinearVelocity = (target - item.part.Position) * 6
-				end
-			end)
+			if item.part and item.part.Parent then
+				local a = angle + ((i / #ringItems) * math.pi * 2)
+				local target = root.Position + Vector3.new(math.cos(a) * radius, math.sin(os.clock() * 4 + i) * 3, math.sin(a) * radius)
+				item.part.AssemblyLinearVelocity = (target - item.part.Position) * 6
+			end
 		end
 	end)
 end)
 
 
--- ===== BRING & SHOOT (ГЛОБАЛЬНИЙ ЯК SUPER RING) =====
+-- ===== ГЛОБАЛЬНИЙ BRING & SHOOT (СІТКА БЕЗ КОЛІЗІЙ) =====
 local bringScanTask = nil
 
-RunService.Heartbeat:Connect(function(dt)
+RunService.Heartbeat:Connect(function()
 	if #heldItems == 0 then return end
 
 	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 	if not root then return end
 
-	-- Точка прямо перед гравцем
-	local targetCenter = root.Position + (root.CFrame.LookVector * 8) + Vector3.new(0, 2, 0)
+	local totalItems = #heldItems
 
-	for _, item in ipairs(heldItems) do
+	for i, item in ipairs(heldItems) do
 		pcall(function()
 			local part = item.part
 			if part and part.Parent and not part.Anchored then
 				
-				local diff = targetCenter - part.Position
-				local force = diff * 8
+				-- ФОРМУЄМО МАТРИЦЮ (СІТКУ) ПРЕДМЕТІВ ПЕРЕД ГРАВЦЕМ
+				-- Це вирішує проблему локальності! Предмети більше не стикаються на сервері.
+				local maxCols = 5 -- Максимум 5 предметів у ряд
+				local row = math.floor((i - 1) / maxCols)
+				local itemsInThisRow = math.min(totalItems - (row * maxCols), maxCols)
+				local col = (i - 1) % maxCols
 				
-				-- ВАЖЛИВО ДЛЯ ГЛОБАЛЬНОСТІ: 
-				-- Сервер блокує зміни фізики, якщо швидкість завелика. 
-				-- Обмежуємо силу магніту до 250 (безпечна зона для сервера), 
-				-- щоб предмети летіли до тебе ГЛОБАЛЬНО, а не тільки на твоєму екрані.
-				if force.Magnitude > 250 then
-					force = force.Unit * 250
-				end
+				local spacing = 4.5 -- Відстань між предметами (запобігає колізіям)
+				local offsetX = (col - (itemsInThisRow - 1) / 2) * spacing
+				local offsetY = (row * spacing) + 1.5 -- Чим більше предметів, тим вище будується стіна
+				local offsetZ = -8 -- 8 студів перед обличчям
 				
-				part.AssemblyLinearVelocity = force
+				-- Обчислюємо точну точку для ЦЬОГО конкретного предмета у просторі
+				local targetPos = root.CFrame:PointToWorldSpace(Vector3.new(offsetX, offsetY, offsetZ))
+				
+				local diff = targetPos - part.Position
+				
+				-- Сила тяжіння без лімітів, як у Super Ring
+				part.AssemblyLinearVelocity = diff * 7
 				part.AssemblyAngularVelocity = item.spin
 			end
 		end)
@@ -541,16 +365,12 @@ end)
 local function grabPart(part)
 	pcall(function()
 		if part.Anchored then return end
-		
-		-- Змінюємо колізію ТІЛЬКИ ОДИН РАЗ при захваті.
-		-- (Якщо це робити в циклі Heartbeat, сервер миттєво відбере Network Ownership).
 		local origCollide = part.CanCollide
 		part.CanCollide = false
-		
 		table.insert(heldItems, {
 			part = part,
 			origCollide = origCollide,
-			spin = Vector3.new(math.random(-15, 15), math.random(-15, 15), math.random(-15, 15))
+			spin = Vector3.new(math.random(-10, 10), math.random(-10, 10), math.random(-10, 10))
 		})
 	end)
 end
@@ -564,7 +384,7 @@ bringButton.MouseButton1Click:Connect(function()
 				for _, h in ipairs(heldItems) do if h.part == obj then held = true break end end
 				if not held then 
 					grabPart(obj) 
-					return
+					break -- Беремо тільки один найближчий доступний предмет
 				end
 			end
 		end
@@ -585,11 +405,10 @@ bringAllButton.MouseButton1Click:Connect(function()
 						if not (pModel and pModel:FindFirstChild("Humanoid")) and obj.Name ~= "Baseplate" and obj.Name ~= "Terrain" then
 							local held = false
 							for _, h in ipairs(heldItems) do if h.part == obj then held = true break end end
-							
 							if not held then
 								grabPart(obj)
 								added += 1
-								if added >= 15 then break end 
+								if added >= 25 then break end 
 							end
 						end
 					end
@@ -598,28 +417,21 @@ bringAllButton.MouseButton1Click:Connect(function()
 			end
 		end)
 	else
-		if bringScanTask then
-			task.cancel(bringScanTask)
-			bringScanTask = nil
-		end
+		if bringScanTask then task.cancel(bringScanTask); bringScanTask = nil end
 	end
 end)
 
 shootButton.MouseButton1Click:Connect(function()
 	local cam = workspace.CurrentCamera
-	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-	if not root or not cam or #heldItems == 0 then return end
+	if not cam or #heldItems == 0 then return end
 	
 	local dir = cam.CFrame.LookVector
 	for _, item in ipairs(heldItems) do
 		pcall(function()
 			if item.part and item.part.Parent and not item.part.Anchored then
 				item.part.CanCollide = item.origCollide
-				
-				-- Швидкість пострілу лімітовано до 250! 
-				-- Більше значення анти-чіт сервера сприйме як збій і предмет полетить лише в тебе на екрані.
-				item.part.AssemblyLinearVelocity = dir * 250
-				item.part.AssemblyAngularVelocity = Vector3.new(math.random(-50,50), math.random(-50,50), math.random(-50,50))
+				-- Запускаємо предмети вперед і трохи вгору
+				item.part.AssemblyLinearVelocity = (dir * 400) + Vector3.new(0, 30, 0)
 			end
 		end)
 	end
