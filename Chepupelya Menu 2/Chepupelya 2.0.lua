@@ -248,7 +248,7 @@ flyButton.MouseButton1Click:Connect(function()
 	if flying then startFly() else stopFly() end
 end)
 
--- ===== PUSH MODE (ОНОВЛЕНО З ПОВЕРНЕННЯМ НА МІСЦЕ) =====
+-- ===== PUSH MODE =====
 local pushModeOn = false
 local energyCharge = 0
 local pushAnchorPart = nil
@@ -272,7 +272,6 @@ local function cleanPushPhysics()
 		end
 	end
 	
-	-- Видаляємо якір, якщо він є
 	if pushAnchorPart then
 		pushAnchorPart:Destroy()
 		pushAnchorPart = nil
@@ -297,7 +296,6 @@ RunService.Heartbeat:Connect(function(dt)
 	local hum = char and char:FindFirstChild("Humanoid")
 	if not root or not hum then return end
 
-	-- 1. Якщо у нас вже є ціль, перевіряємо її стан
 	if currentPushTarget then
 		local isValid = false
 		local tRoot = nil
@@ -312,23 +310,18 @@ RunService.Heartbeat:Connect(function(dt)
 
 		if isValid then
 			local dist = (tRoot.Position - root.Position).Magnitude
-			-- Якщо гравця далеко відкинуто або він телепортувався
 			if dist > 25 then
 				isValid = false
 			end
 		end
 
-		-- Якщо ціль зникла, померла або відлетіла
 		if not isValid then
-			-- Телепортуємося назад на наш невидимий парт
 			if pushAnchorPart then
 				root.CFrame = pushAnchorPart.CFrame
 			end
-			-- Скидаємо фізику та відв'язуємось
 			cleanPushPhysics()
 			return
 		else
-			-- Продовжуємо накопичення енергії та обертання
 			root.AssemblyLinearVelocity = Vector3.zero
 			hum.AutoRotate = false
 			energyCharge = math.min(energyCharge + dt * 4, 1)
@@ -342,11 +335,10 @@ RunService.Heartbeat:Connect(function(dt)
 				root.CFrame = root.CFrame:Lerp(tRoot.CFrame, 0.2)
 			end
 			
-			return -- Виходимо з функції, щоб не шукати нову ціль
+			return 
 		end
 	end
 
-	-- 2. Якщо немає цілі, шукаємо гравця у контактній зоні (7 студів)
 	local targetPlayer = nil
 	local minDistance = 7
 
@@ -365,7 +357,6 @@ RunService.Heartbeat:Connect(function(dt)
 	end
 
 	if targetPlayer then
-		-- Створюємо якір на нашій позиції перед притягуванням
 		pushAnchorPart = Instance.new("Part")
 		pushAnchorPart.Name = "PushReturnAnchor"
 		pushAnchorPart.Anchored = true
@@ -375,10 +366,8 @@ RunService.Heartbeat:Connect(function(dt)
 		pushAnchorPart.CFrame = root.CFrame
 		pushAnchorPart.Parent = workspace
 		
-		-- Запам'ятовуємо ціль
 		currentPushTarget = targetPlayer
 	else
-		-- Якщо нікого немає, а енергія лишилася чи парт існує – очищуємо
 		if energyCharge > 0 or pushAnchorPart then
 			cleanPushPhysics()
 		end
@@ -389,7 +378,7 @@ player.CharacterAdded:Connect(function()
 	if pushModeOn then cleanPushPhysics() end
 end)
 
--- ===== SUPER RING (FIXED & OPTIMIZED) =====
+-- ===== SUPER RING =====
 local superRingOn, ringConnection = false, nil
 local ringItems = {}
 local ringScanTask = nil
@@ -499,10 +488,9 @@ superRingButton.MouseButton1Click:Connect(function()
 	end)
 end)
 
--- ===== BRING & SHOOT (ПОКРАЩЕНА ВЕРСІЯ) =====
+-- ===== BRING & SHOOT (МАГНІТ ПЕРЕД ГРАВЦЕМ, ГЛОБАЛЬНА ФІЗИКА) =====
 local heldItems, autoBringOn = {}, false
 
--- Допоміжна функція для отримання прав на фізику (Network Ownership)
 local function claimOwnership()
 	pcall(function()
 		if sethiddenproperty then
@@ -512,6 +500,9 @@ local function claimOwnership()
 		if setsimulationradius then
 			setsimulationradius(9e9, 9e9)
 		end
+		if settings().Physics then
+			settings().Physics.AllowSleep = false 
+		end
 	end)
 end
 
@@ -519,30 +510,26 @@ RunService.Heartbeat:Connect(function(dt)
 	if #heldItems == 0 then return end
 	claimOwnership() 
 
-	local cam = workspace.CurrentCamera
 	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-	if not root or not cam then return end
+	if not root then return end
 
-	-- Тримаємо деталі прямо перед камерою (зручно для пострілу)
-	local targetCenter = cam.CFrame * CFrame.new(0, 0, -10)
+	local targetCenter = root.CFrame * CFrame.new(0, 2, -8)
 
 	for _, item in ipairs(heldItems) do
 		pcall(function()
 			local part = item.part
-			if part and part.Parent then
-				-- Будимо фізику деталі
-				part.AssemblyLinearVelocity = part.AssemblyLinearVelocity + Vector3.new(0.001, 0, 0)
+			if part and part.Parent and not part.Anchored then
 				
-				local dist = (targetCenter.Position - part.Position).Magnitude
+				part.AssemblyLinearVelocity = part.AssemblyLinearVelocity + Vector3.new(0.001, 0.001, 0.001)
 				
-				-- Якщо деталь надто далеко, миттєво телепортуємо (CFrame) ближче,
-				-- отримуємо права (Network Ownership), а вже потім плавно тримаємо.
-				if dist > 150 then
-					part.CFrame = targetCenter
-					part.AssemblyLinearVelocity = Vector3.zero
+				local dir = (targetCenter.Position - part.Position)
+				local dist = dir.Magnitude
+				
+				if dist > 4 then
+					local pullSpeed = math.clamp(dist * 12, 50, 1500)
+					part.AssemblyLinearVelocity = dir.Unit * pullSpeed
 				else
-					-- Агресивне утримання (множник 40)
-					part.AssemblyLinearVelocity = (targetCenter.Position - part.Position) * 40
+					part.AssemblyLinearVelocity = dir * 25
 				end
 				
 				part.AssemblyAngularVelocity = item.spin
@@ -553,6 +540,8 @@ end)
 
 local function grabPart(part)
 	pcall(function()
+		if part.Anchored then return end
+		
 		local origMassless = part.Massless
 		part.Massless = true 
 		part.CanCollide = false
@@ -561,7 +550,7 @@ local function grabPart(part)
 			part = part,
 			origCollide = true,
 			origMassless = origMassless,
-			spin = Vector3.new(math.random(-25, 25), math.random(-25, 25), math.random(-25, 25))
+			spin = Vector3.new(math.random(-15, 15), math.random(-15, 15), math.random(-15, 15))
 		})
 	end)
 end
@@ -621,16 +610,12 @@ shootButton.MouseButton1Click:Connect(function()
 	local dir = cam.CFrame.LookVector
 	for _, item in ipairs(heldItems) do
 		pcall(function()
-			if item.part and item.part.Parent then
+			if item.part and item.part.Parent and not item.part.Anchored then
 				item.part.CanCollide = item.origCollide
 				item.part.Massless = item.origMassless or false
 				
-				-- Зміщуємо трохи вперед перед пострілом
-				item.part.CFrame = item.part.CFrame + (dir * 3)
-				
-				-- Супер-удар
-				item.part.AssemblyLinearVelocity = dir * 12000
-				item.part.AssemblyAngularVelocity = Vector3.new(math.random(-100,100), math.random(-100,100), math.random(-100,100))
+				item.part.AssemblyLinearVelocity = dir * 9000
+				item.part.AssemblyAngularVelocity = Vector3.new(math.random(-50,50), math.random(-50,50), math.random(-50,50))
 			end
 		end)
 	end
