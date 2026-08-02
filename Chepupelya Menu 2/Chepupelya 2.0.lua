@@ -1,5 +1,5 @@
 -- ==========================================================
--- CHEPUPELYA MENU (KINETIC CHARGE EDITION + GLOBAL BRING FIX)
+-- CHEPUPELYA MENU (KINETIC CHARGE EDITION + 100% GLOBAL BRING)
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -374,22 +374,37 @@ RunService.Heartbeat:Connect(function(dt)
 	end
 end)
 
--- ГЛОБАЛЬНА ФУНКЦІЯ ПРАВ НА МЕРЕЖУ (ДЛЯ RING ТА BRING)
-local function boostNetwork()
-	pcall(function()
-		if sethiddenproperty then
-			sethiddenproperty(player, "MaximumSimulationRadius", 9e9)
-			sethiddenproperty(player, "SimulationRadius", 9e9)
-		end
-		if setsimulationradius then
-			setsimulationradius(9e9, 9e9)
-		end
-	end)
-end
+
+-- =========================================================================
+-- ГЛОБАЛЬНИЙ ВПЛИВ НА ФІЗИКУ ТА ПРАВА (Network Ownership)
+-- =========================================================================
+local heldItems = {}
+local autoBringOn = false
+local superRingOn = false
+local ringItems = {}
+
+-- Виконуємо взлом Network Ownership постійно в фоні, якщо активована хоч одна функція
+RunService.Heartbeat:Connect(function()
+	if superRingOn or autoBringOn or #heldItems > 0 or pushModeOn then
+		pcall(function()
+			if sethiddenproperty then
+				sethiddenproperty(player, "SimulationRadius", 100000)
+				sethiddenproperty(player, "MaxSimulationRadius", 100000)
+				sethiddenproperty(player, "MaximumSimulationRadius", 100000)
+			end
+			if setsimulationradius then
+				setsimulationradius(100000, 100000)
+			end
+			if settings().Physics then
+				settings().Physics.AllowSleep = false
+			end
+		end)
+	end
+end)
+
 
 -- ===== SUPER RING =====
-local superRingOn, ringConnection = false, nil
-local ringItems = {}
+local ringConnection = nil
 local ringScanTask = nil
 
 local function stopSuperRing()
@@ -426,7 +441,6 @@ superRingButton.MouseButton1Click:Connect(function()
 
 	ringScanTask = task.spawn(function()
 		while superRingOn do
-			boostNetwork()
 			local char = player.Character
 			if char then
 				local newItems = {}
@@ -444,6 +458,7 @@ superRingButton.MouseButton1Click:Connect(function()
 							end
 							
 							if not found then
+								-- Змінюємо CanCollide лише ОДИН РАЗ (як і треба)
 								table.insert(newItems, {part = obj, origCollide = obj.CanCollide})
 								obj.CanCollide = false
 							end
@@ -480,8 +495,6 @@ superRingButton.MouseButton1Click:Connect(function()
 						height,
 						math.sin(angle) * radius
 					)
-
-					-- Логіка Super Ring
 					item.part.AssemblyLinearVelocity = (target - item.part.Position) * 6
 				end
 			end)
@@ -489,19 +502,17 @@ superRingButton.MouseButton1Click:Connect(function()
 	end)
 end)
 
--- ===== BRING & SHOOT (СИНХРОНІЗОВАНО ЯК У SUPER RING) =====
-local heldItems = {}
-local autoBringOn = false
+
+-- ===== BRING & SHOOT (ГЛОБАЛЬНИЙ ЯК SUPER RING) =====
 local bringScanTask = nil
 
 RunService.Heartbeat:Connect(function(dt)
 	if #heldItems == 0 then return end
-	boostNetwork() 
 
 	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 	if not root then return end
 
-	-- Ціль: рівно перед гравцем
+	-- Точка прямо перед гравцем
 	local targetCenter = root.Position + (root.CFrame.LookVector * 8) + Vector3.new(0, 2, 0)
 
 	for _, item in ipairs(heldItems) do
@@ -509,12 +520,18 @@ RunService.Heartbeat:Connect(function(dt)
 			local part = item.part
 			if part and part.Parent and not part.Anchored then
 				
-				-- Постійно вимикаємо колізію, щоб предмети не застрягали і не втрачали права (Network Ownership)
-				part.CanCollide = false
-				
-				-- М'яка, але сильна фізична тяга, ідентична Super Ring
 				local diff = targetCenter - part.Position
-				part.AssemblyLinearVelocity = diff * 8 
+				local force = diff * 8
+				
+				-- ВАЖЛИВО ДЛЯ ГЛОБАЛЬНОСТІ: 
+				-- Сервер блокує зміни фізики, якщо швидкість завелика. 
+				-- Обмежуємо силу магніту до 250 (безпечна зона для сервера), 
+				-- щоб предмети летіли до тебе ГЛОБАЛЬНО, а не тільки на твоєму екрані.
+				if force.Magnitude > 250 then
+					force = force.Unit * 250
+				end
+				
+				part.AssemblyLinearVelocity = force
 				part.AssemblyAngularVelocity = item.spin
 			end
 		end)
@@ -525,16 +542,20 @@ local function grabPart(part)
 	pcall(function()
 		if part.Anchored then return end
 		
+		-- Змінюємо колізію ТІЛЬКИ ОДИН РАЗ при захваті.
+		-- (Якщо це робити в циклі Heartbeat, сервер миттєво відбере Network Ownership).
+		local origCollide = part.CanCollide
+		part.CanCollide = false
+		
 		table.insert(heldItems, {
 			part = part,
-			origCollide = part.CanCollide,
+			origCollide = origCollide,
 			spin = Vector3.new(math.random(-15, 15), math.random(-15, 15), math.random(-15, 15))
 		})
 	end)
 end
 
 bringButton.MouseButton1Click:Connect(function()
-	boostNetwork()
 	for _, obj in ipairs(workspace:GetDescendants()) do
 		if obj:IsA("BasePart") and not obj.Anchored and not obj:IsDescendantOf(player.Character or {}) then
 			local pModel = obj:FindFirstAncestorOfClass("Model")
@@ -555,10 +576,8 @@ bringAllButton.MouseButton1Click:Connect(function()
 	updateButtonVisual(bringAllButton, autoBringOn, "Bring All")
 	
 	if autoBringOn then
-		-- Скан предметів в окремому циклі як у Super Ring, щоб не лагало
 		bringScanTask = task.spawn(function()
 			while autoBringOn do
-				boostNetwork()
 				local added = 0
 				for _, obj in ipairs(workspace:GetDescendants()) do
 					if obj:IsA("BasePart") and not obj.Anchored and not obj:IsDescendantOf(player.Character or {}) then
@@ -597,9 +616,9 @@ shootButton.MouseButton1Click:Connect(function()
 			if item.part and item.part.Parent and not item.part.Anchored then
 				item.part.CanCollide = item.origCollide
 				
-				-- ВАЖЛИВО: 350 - це максимальна стабільна швидкість для сервера.
-				-- Будь-що вище (типу 9000, як було раніше) сервер просто відкидає як помилку і воно працює локально!
-				item.part.AssemblyLinearVelocity = dir * 350
+				-- Швидкість пострілу лімітовано до 250! 
+				-- Більше значення анти-чіт сервера сприйме як збій і предмет полетить лише в тебе на екрані.
+				item.part.AssemblyLinearVelocity = dir * 250
 				item.part.AssemblyAngularVelocity = Vector3.new(math.random(-50,50), math.random(-50,50), math.random(-50,50))
 			end
 		end)
