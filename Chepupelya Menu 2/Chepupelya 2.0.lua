@@ -374,23 +374,23 @@ RunService.Heartbeat:Connect(function(dt)
 	end
 end)
 
-player.CharacterAdded:Connect(function()
-	if pushModeOn then cleanPushPhysics() end
-end)
-
--- ===== SUPER RING =====
-local superRingOn, ringConnection = false, nil
-local ringItems = {}
-local ringScanTask = nil
-
+-- ГЛОБАЛЬНА ФУНКЦІЯ ПРАВ НА МЕРЕЖУ (ДЛЯ RING ТА BRING)
 local function boostNetwork()
 	pcall(function()
 		if sethiddenproperty then
 			sethiddenproperty(player, "MaximumSimulationRadius", 9e9)
 			sethiddenproperty(player, "SimulationRadius", 9e9)
 		end
+		if setsimulationradius then
+			setsimulationradius(9e9, 9e9)
+		end
 	end)
 end
+
+-- ===== SUPER RING =====
+local superRingOn, ringConnection = false, nil
+local ringItems = {}
+local ringScanTask = nil
 
 local function stopSuperRing()
 	superRingOn = false
@@ -481,6 +481,7 @@ superRingButton.MouseButton1Click:Connect(function()
 						math.sin(angle) * radius
 					)
 
+					-- Логіка Super Ring
 					item.part.AssemblyLinearVelocity = (target - item.part.Position) * 6
 				end
 			end)
@@ -488,50 +489,32 @@ superRingButton.MouseButton1Click:Connect(function()
 	end)
 end)
 
--- ===== BRING & SHOOT (МАГНІТ ПЕРЕД ГРАВЦЕМ, ГЛОБАЛЬНА ФІЗИКА) =====
-local heldItems, autoBringOn = {}, false
-
-local function claimOwnership()
-	pcall(function()
-		if sethiddenproperty then
-			sethiddenproperty(player, "MaximumSimulationRadius", 9e9)
-			sethiddenproperty(player, "SimulationRadius", 9e9)
-		end
-		if setsimulationradius then
-			setsimulationradius(9e9, 9e9)
-		end
-		if settings().Physics then
-			settings().Physics.AllowSleep = false 
-		end
-	end)
-end
+-- ===== BRING & SHOOT (СИНХРОНІЗОВАНО ЯК У SUPER RING) =====
+local heldItems = {}
+local autoBringOn = false
+local bringScanTask = nil
 
 RunService.Heartbeat:Connect(function(dt)
 	if #heldItems == 0 then return end
-	claimOwnership() 
+	boostNetwork() 
 
 	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 	if not root then return end
 
-	local targetCenter = root.CFrame * CFrame.new(0, 2, -8)
+	-- Ціль: рівно перед гравцем
+	local targetCenter = root.Position + (root.CFrame.LookVector * 8) + Vector3.new(0, 2, 0)
 
 	for _, item in ipairs(heldItems) do
 		pcall(function()
 			local part = item.part
 			if part and part.Parent and not part.Anchored then
 				
-				part.AssemblyLinearVelocity = part.AssemblyLinearVelocity + Vector3.new(0.001, 0.001, 0.001)
+				-- Постійно вимикаємо колізію, щоб предмети не застрягали і не втрачали права (Network Ownership)
+				part.CanCollide = false
 				
-				local dir = (targetCenter.Position - part.Position)
-				local dist = dir.Magnitude
-				
-				if dist > 4 then
-					local pullSpeed = math.clamp(dist * 12, 50, 1500)
-					part.AssemblyLinearVelocity = dir.Unit * pullSpeed
-				else
-					part.AssemblyLinearVelocity = dir * 25
-				end
-				
+				-- М'яка, але сильна фізична тяга, ідентична Super Ring
+				local diff = targetCenter - part.Position
+				part.AssemblyLinearVelocity = diff * 8 
 				part.AssemblyAngularVelocity = item.spin
 			end
 		end)
@@ -542,21 +525,16 @@ local function grabPart(part)
 	pcall(function()
 		if part.Anchored then return end
 		
-		local origMassless = part.Massless
-		part.Massless = true 
-		part.CanCollide = false
-		
 		table.insert(heldItems, {
 			part = part,
-			origCollide = true,
-			origMassless = origMassless,
+			origCollide = part.CanCollide,
 			spin = Vector3.new(math.random(-15, 15), math.random(-15, 15), math.random(-15, 15))
 		})
 	end)
 end
 
 bringButton.MouseButton1Click:Connect(function()
-	claimOwnership()
+	boostNetwork()
 	for _, obj in ipairs(workspace:GetDescendants()) do
 		if obj:IsA("BasePart") and not obj.Anchored and not obj:IsDescendantOf(player.Character or {}) then
 			local pModel = obj:FindFirstAncestorOfClass("Model")
@@ -575,29 +553,35 @@ end)
 bringAllButton.MouseButton1Click:Connect(function()
 	autoBringOn = not autoBringOn
 	updateButtonVisual(bringAllButton, autoBringOn, "Bring All")
-end)
-
-task.spawn(function()
-	while true do
-		task.wait(0.1) 
-		if autoBringOn then
-			claimOwnership()
-			local added = 0
-			for _, obj in ipairs(workspace:GetDescendants()) do
-				if obj:IsA("BasePart") and not obj.Anchored and not obj:IsDescendantOf(player.Character or {}) then
-					local pModel = obj:FindFirstAncestorOfClass("Model")
-					if not (pModel and pModel:FindFirstChild("Humanoid")) and obj.Name ~= "Baseplate" and obj.Name ~= "Terrain" then
-						local held = false
-						for _, h in ipairs(heldItems) do if h.part == obj then held = true break end end
-						
-						if not held then
-							grabPart(obj)
-							added += 1
-							if added >= 15 then break end 
+	
+	if autoBringOn then
+		-- Скан предметів в окремому циклі як у Super Ring, щоб не лагало
+		bringScanTask = task.spawn(function()
+			while autoBringOn do
+				boostNetwork()
+				local added = 0
+				for _, obj in ipairs(workspace:GetDescendants()) do
+					if obj:IsA("BasePart") and not obj.Anchored and not obj:IsDescendantOf(player.Character or {}) then
+						local pModel = obj:FindFirstAncestorOfClass("Model")
+						if not (pModel and pModel:FindFirstChild("Humanoid")) and obj.Name ~= "Baseplate" and obj.Name ~= "Terrain" then
+							local held = false
+							for _, h in ipairs(heldItems) do if h.part == obj then held = true break end end
+							
+							if not held then
+								grabPart(obj)
+								added += 1
+								if added >= 15 then break end 
+							end
 						end
 					end
 				end
+				task.wait(0.5)
 			end
+		end)
+	else
+		if bringScanTask then
+			task.cancel(bringScanTask)
+			bringScanTask = nil
 		end
 	end
 end)
@@ -612,9 +596,10 @@ shootButton.MouseButton1Click:Connect(function()
 		pcall(function()
 			if item.part and item.part.Parent and not item.part.Anchored then
 				item.part.CanCollide = item.origCollide
-				item.part.Massless = item.origMassless or false
 				
-				item.part.AssemblyLinearVelocity = dir * 9000
+				-- ВАЖЛИВО: 350 - це максимальна стабільна швидкість для сервера.
+				-- Будь-що вище (типу 9000, як було раніше) сервер просто відкидає як помилку і воно працює локально!
+				item.part.AssemblyLinearVelocity = dir * 350
 				item.part.AssemblyAngularVelocity = Vector3.new(math.random(-50,50), math.random(-50,50), math.random(-50,50))
 			end
 		end)
