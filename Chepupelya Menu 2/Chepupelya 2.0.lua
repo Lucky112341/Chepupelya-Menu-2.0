@@ -1,5 +1,5 @@
 -- ==========================================================
--- CHEPUPELYA MENU (100% GLOBAL BRING - ANTI-COLLISION GRID + PUSH)
+-- CHEPUPELYA MENU (100% GLOBAL BRING - ANTI-COLLISION GRID)
 -- ==========================================================
 
 local Players = game:GetService("Players")
@@ -153,7 +153,7 @@ jumpButton.MouseButton1Click:Connect(function()
 end)
 player.CharacterAdded:Connect(updateCharacterSettings)
 
--- ===== FLY =====
+-- ===== FLY (Скорочено) =====
 local flying, flyConnection, bodyVelocity, bodyGyro = false, nil, nil, nil
 local keysPressed = {}
 UserInputService.InputBegan:Connect(function(input, gp) if not gp then keysPressed[input.KeyCode] = true end end)
@@ -268,6 +268,7 @@ RunService.Heartbeat:Connect(function(dt)
 	end
 end)
 
+
 -- ===== SUPER RING =====
 local ringConnection, ringScanTask
 superRingButton.MouseButton1Click:Connect(function()
@@ -319,7 +320,8 @@ superRingButton.MouseButton1Click:Connect(function()
 	end)
 end)
 
--- ===== ГЛОБАЛЬНИЙ BRING & SHOOT (СІТКА + FLING/PUSH ІНШИХ) =====
+
+-- ===== ГЛОБАЛЬНИЙ BRING & SHOOT (СІТКА БЕЗ КОЛІЗІЙ) =====
 local bringScanTask = nil
 
 RunService.Heartbeat:Connect(function()
@@ -335,31 +337,26 @@ RunService.Heartbeat:Connect(function()
 			local part = item.part
 			if part and part.Parent and not part.Anchored then
 				
-				-- 1. ЛОКАЛЬНА КОЛІЗІЯ: Вимикаємо кожному предмету CanCollide щокадру.
-				-- Це робить предмети прозорими для ТЕБЕ, але на сервері вони залишаються твердими!
-				part.CanCollide = false 
-				
 				-- ФОРМУЄМО МАТРИЦЮ (СІТКУ) ПРЕДМЕТІВ ПЕРЕД ГРАВЦЕМ
-				local maxCols = 5 
+				-- Це вирішує проблему локальності! Предмети більше не стикаються на сервері.
+				local maxCols = 5 -- Максимум 5 предметів у ряд
 				local row = math.floor((i - 1) / maxCols)
 				local itemsInThisRow = math.min(totalItems - (row * maxCols), maxCols)
 				local col = (i - 1) % maxCols
 				
-				local spacing = 4.5 
+				local spacing = 4.5 -- Відстань між предметами (запобігає колізіям)
 				local offsetX = (col - (itemsInThisRow - 1) / 2) * spacing
-				local offsetY = (row * spacing) + 1.5 
-				local offsetZ = -8 
+				local offsetY = (row * spacing) + 1.5 -- Чим більше предметів, тим вище будується стіна
+				local offsetZ = -8 -- 8 студів перед обличчям
 				
+				-- Обчислюємо точну точку для ЦЬОГО конкретного предмета у просторі
 				local targetPos = root.CFrame:PointToWorldSpace(Vector3.new(offsetX, offsetY, offsetZ))
+				
 				local diff = targetPos - part.Position
 				
-				-- 2. АГРЕСИВНЕ ПРИТЯГАННЯ
-				part.AssemblyLinearVelocity = diff * 15
-				
-				-- 3. МЕХАНІКА PUSH/FLING: Додаємо екстремальне обертання.
-				-- Ти цього не помітиш (бо для тебе колізії немає), але інших гравців 
-				-- ці предмети будуть жорстко відкидати при контакті!
-				part.AssemblyAngularVelocity = Vector3.new(50000, 50000, 50000)
+				-- Сила тяжіння без лімітів, як у Super Ring
+				part.AssemblyLinearVelocity = diff * 7
+				part.AssemblyAngularVelocity = item.spin
 			end
 		end)
 	end
@@ -372,7 +369,8 @@ local function grabPart(part)
 		part.CanCollide = false
 		table.insert(heldItems, {
 			part = part,
-			origCollide = origCollide
+			origCollide = origCollide,
+			spin = Vector3.new(math.random(-10, 10), math.random(-10, 10), math.random(-10, 10))
 		})
 	end)
 end
@@ -386,7 +384,7 @@ bringButton.MouseButton1Click:Connect(function()
 				for _, h in ipairs(heldItems) do if h.part == obj then held = true break end end
 				if not held then 
 					grabPart(obj) 
-					break
+					break -- Беремо тільки один найближчий доступний предмет
 				end
 			end
 		end
@@ -432,7 +430,7 @@ shootButton.MouseButton1Click:Connect(function()
 		pcall(function()
 			if item.part and item.part.Parent and not item.part.Anchored then
 				item.part.CanCollide = item.origCollide
-				-- Стріляємо предметами
+				-- Запускаємо предмети вперед і трохи вгору
 				item.part.AssemblyLinearVelocity = (dir * 400) + Vector3.new(0, 30, 0)
 			end
 		end)
